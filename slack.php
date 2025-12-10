@@ -24,19 +24,16 @@ class SlackPlugin extends Plugin {
     /**
      * The entrypoint of the plugin, keep short, always runs.
      */
-    function bootstrap() {
-        $updateTypes = $this->getConfig()->get('slack-update-types');
-        
-        // Listen for osTicket to tell us it's made a new ticket or updated
-        // an existing ticket:
-        if($updateTypes == 'both' || $updateTypes == 'newOnly' || empty($updateTypes)) {
+    function bootstrap(): void {
+        $config = $this->getConfig($this->getPluginInstance());
+        if ($config->get('slack-update-ticket-opened')) {
             Signal::connect('ticket.created', array($this, 'onTicketCreated'));
+            return;
         }
-        
-        if($updateTypes == 'both' || $updateTypes == 'updatesOnly' || empty($updateTypes)) {
+        if ($config->get('slack-update-ticket-reply')) {
             Signal::connect('threadentry.created', array($this, 'onTicketUpdated'));
+            return;
         }
-        // Tasks? Signal::connect('task.created',array($this,'onTaskCreated'));
     }
 
     /**
@@ -53,8 +50,9 @@ class SlackPlugin extends Plugin {
             return;
         }
    
+        $config = $this->getConfig($this->getPluginInstance());
         // if slack-update-types is "updatesOnly", then don't send this!
-        if($this->getConfig(self::$pluginInstance)->get('slack-update-types') == 'updatesOnly') {return;}
+        if(!$config->get('slack-update-ticket-opened')) {return;}
 
         // Convert any HTML in the message into text
         $plaintext = Format::html2text($ticket->getMessages()[0]->getBody()->getClean());
@@ -66,7 +64,7 @@ class SlackPlugin extends Plugin {
                 , $ticket->getId()
                 , $ticket->getNumber()
                 , __("created"));
-        $this->sendToSlack($ticket, $heading, $plaintext);
+        $this->sendToSlack($ticket, $heading, $plaintext, $config->get('slack-update-ticket-opened-color'));
     }
 
     /**
@@ -83,13 +81,9 @@ class SlackPlugin extends Plugin {
             return;
         }
         
+        $config = $this->getConfig($this->getPluginInstance());
         // if slack-update-types is "newOnly", then don't send this!
-        if($this->getConfig(self::$pluginInstance)->get('slack-update-types') == 'newOnly') {return;}
-        
-        if (!$entry instanceof MessageThreadEntry) {
-            // this was a reply or a system entry.. not a message from a user
-            return;
-        }
+        if(!$config->get('slack-update-ticket-reply')) {return;}
 
         // Need to fetch the ticket from the ThreadEntry
         $ticket = $this->getTicket($entry);
@@ -113,7 +107,7 @@ class SlackPlugin extends Plugin {
                 , $ticket->getId()
                 , $ticket->getNumber()
                 , __("updated"));
-        $this->sendToSlack($ticket, $heading, $plaintext, 'warning');
+        $this->sendToSlack($ticket, $heading, $plaintext, $config->get('slack-update-ticket-reply-color'));
     }
 
     /**
@@ -124,10 +118,10 @@ class SlackPlugin extends Plugin {
      * @param Ticket $ticket
      * @param string $heading
      * @param string $body
-     * @param string $colour
+     * @param string $color
      * @throws \Exception
      */
-    function sendToSlack(Ticket $ticket, $heading, $body, $colour = 'good') {
+    function sendToSlack(Ticket $ticket, $heading, $body, $color = 'good') {
 	global $ost, $cfg;
         if (!$ost instanceof osTicket || !$cfg instanceof OsticketConfig) {
             error_log("Slack plugin called too early.");
@@ -160,7 +154,7 @@ class SlackPlugin extends Plugin {
         $payload['attachments'][0] = [
             'pretext'     => $heading,
             'fallback'    => $heading,
-            'color'       => $colour,
+            'color'       => $color,
             // 'author'      => $ticket->getOwner(),
             //  'author_link' => $cfg->getUrl() . 'scp/users.php?id=' . $ticket->getOwnerId(),
             // 'author_icon' => $this->get_gravatar($ticket->getEmail()),
@@ -180,9 +174,9 @@ class SlackPlugin extends Plugin {
                 'short' => TRUE,
             ];
         }
-        // Change the colour to Fuschia if ticket is overdue
+        // Change the color to Fuschia if ticket is overdue
         if ($ticket->isOverdue()) {
-            $payload['attachments'][0]['colour'] = '#ff00ff';
+            $payload['attachments'][0]['color'] = '#ff00ff';
         }
 
         // Format the payload:
