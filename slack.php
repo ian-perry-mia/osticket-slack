@@ -26,14 +26,17 @@ class SlackPlugin extends Plugin {
      */
     function bootstrap(): void {
         $config = $this->getConfig($this->getPluginInstance());
-        if ($config->get('slack-update-ticket-opened')) {
-            Signal::connect('ticket.created', array($this, 'onTicketCreated'));
-            return;
+        if ($config->get('slack-update-ticket-opened') == true) {
+            Signal::connect('ticket.created', [$this, 'onTicketCreated']);
         }
-        if ($config->get('slack-update-ticket-reply')) {
-            Signal::connect('threadentry.created', array($this, 'onTicketUpdated'));
-            return;
+        if (
+            $config->get('slack-update-ticket-agent-reply') == true
+            || $config->get('slack-update-ticket-internal-note') == true
+            || $config->get('slack-update-ticket-user-reply') == true    
+        ) {
+            Signal::connect('threadentry.created', [$this, 'onTicketUpdated']);
         }
+        return;
     }
 
     /**
@@ -43,7 +46,7 @@ class SlackPlugin extends Plugin {
      * @param Ticket $ticket
      * @return type
      */
-    function onTicketCreated(Ticket $ticket) {
+    function onTicketCreated(Ticket $ticket): void {
         global $cfg;
         if (!$cfg instanceof OsticketConfig) {
             error_log("Slack plugin called too early.");
@@ -51,7 +54,8 @@ class SlackPlugin extends Plugin {
         }
    
         $config = $this->getConfig($this->getPluginInstance());
-        // if slack-update-types is "updatesOnly", then don't send this!
+
+        // Double check that we want to send new ticket messages.
         if(!$config->get('slack-update-ticket-opened')) {return;}
 
         // Convert any HTML in the message into text
@@ -63,8 +67,9 @@ class SlackPlugin extends Plugin {
                 , $cfg->getUrl()
                 , $ticket->getId()
                 , $ticket->getNumber()
-                , __("created"));
+                , "created");
         $this->sendToSlack($ticket, $heading, $plaintext, $config->get('slack-update-ticket-opened-color'));
+        return;
     }
 
     /**
@@ -74,7 +79,7 @@ class SlackPlugin extends Plugin {
      * @param ThreadEntry $entry
      * @return type
      */
-    function onTicketUpdated(ThreadEntry $entry) {
+    function onTicketUpdated(ThreadEntry $entry): void {
         global $cfg;
         if (!$cfg instanceof OsticketConfig) {
             error_log("Slack plugin called too early.");
@@ -82,6 +87,32 @@ class SlackPlugin extends Plugin {
         }
         
         $config = $this->getConfig($this->getPluginInstance());
+
+                // Format the messages we'll send
+        if ($entry->get('type') == 'N') {
+            // Staff internal note
+            if (!$config->get('slack-update-ticket-internal-note')) {return;}
+            $usertype = "Agent";
+            $edittype = "added internal note to";
+            $color = $config->get('slack-update-ticket-internal-note-color');
+        } else if ($entry->get("type") == 'M') {
+            // User reply
+            if (!$config->get('slack-update-ticket-user-reply')) {return;}
+            $usertype = "User";
+            $edittype = "replied to";
+            $color = $config->get("slack-update-ticket-user-reply-color");
+        } else if ($entry->get("type") == 'R') {
+            // Staff reply
+            if (!$config->get('slack-update-ticket-agent-reply')) {return;}
+            $usertype = "Agent";
+            $edittype = "replied to";
+            $color = $config->get("slack-update-ticket-agent-reply-color");
+        } else {
+            // Unknown type, just call it an update.
+            $usertype = "system";
+            $edittype = "edited";
+        }
+
         // if slack-update-types is "newOnly", then don't send this!
         if(!$config->get('slack-update-ticket-reply')) {return;}
 
@@ -100,14 +131,17 @@ class SlackPlugin extends Plugin {
         // Convert any HTML in the message into text
         $plaintext = Format::html2text($entry->getBody()->getClean());
 
-        // Format the messages we'll send
-        $heading = sprintf('%s CONTROLSTART%sscp/tickets.php?id=%d|#%sCONTROLEND %s'
-                , __("Ticket")
+
+        $heading = sprintf('%s %s %s ticket CONTROLSTART%sscp/tickets.php?id=%d|#%sCONTROLEND'
+                , $usertype
+                , $entry->get("poster")
+                , $edittype
                 , $cfg->getUrl()
                 , $ticket->getId()
                 , $ticket->getNumber()
-                , __("updated"));
+            );
         $this->sendToSlack($ticket, $heading, $plaintext, $config->get('slack-update-ticket-reply-color'));
+        return;
     }
 
     /**
@@ -121,14 +155,15 @@ class SlackPlugin extends Plugin {
      * @param string $color
      * @throws \Exception
      */
-    function sendToSlack(Ticket $ticket, $heading, $body, $color = 'good') {
-	global $ost, $cfg;
-        if (!$ost instanceof osTicket || !$cfg instanceof OsticketConfig) {
-            error_log("Slack plugin called too early.");
-            return;
-	}
-        $url = $this->getConfig($this->getPluginInstance())->get('slack-webhook-url');
-	if (!$url) {
+    function sendToSlack(Ticket $ticket, $heading, $body, $color = 'good'): void {
+        global $ost, $cfg;
+            if (!$ost instanceof osTicket || !$cfg instanceof OsticketConfig) {
+                error_log("Slack plugin called too early.");
+                return;
+            }
+        $config = $this->getConfig($this->getPluginInstance());
+        $url = $config->get('slack-webhook-url');
+        if (!$url) {
             $ost->logError('Slack Plugin not configured', 'You need to read the Readme and configure a webhook URL before using this.');
         }
 
@@ -148,7 +183,7 @@ class SlackPlugin extends Plugin {
         $custom_vars       = [
             'slack_safe_message' => $this->format_text($body),
         ];
-        $formatted_message = $ticket->replaceVars($template, $custom_vars);
+        $formatted_message = trim($ticket->replaceVars($template, $custom_vars));
 
         // Build the payload with the formatted data:
         $payload['attachments'][0] = [
@@ -166,6 +201,7 @@ class SlackPlugin extends Plugin {
             'text'        => $formatted_message,
             'mrkdwn_in'   => ["text"]
         ];
+
         // Add a field for tasks if there are open ones
         if ($ticket->getNumOpenTasks()) {
             $payload['attachments'][0]['fields'][] = [
@@ -174,23 +210,28 @@ class SlackPlugin extends Plugin {
                 'short' => TRUE,
             ];
         }
+
         // Change the color to Fuschia if ticket is overdue
         if ($ticket->isOverdue()) {
-            $payload['attachments'][0]['color'] = '#ff00ff';
+            $payload['attachments'][0]['color'] = $config->get('slack-update-ticket-stale-color');
         }
 
         // Format the payload:
-        $data_string = utf8_encode(json_encode($payload));
-		
+        $data_string = mb_convert_encoding(
+            json_encode($payload),
+            "UTF-8",
+            mb_detect_encoding(json_encode($payload))
+        );
+        
         try {
             // Setup curl
             $ch = curl_init($url);
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data_string);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
                 'Content-Type: application/json',
-                'Content-Length: ' . strlen($data_string))
+                'Content-Length: ' . strlen($data_string)]
             );
 
             // Actually send the payload to slack:
@@ -227,9 +268,9 @@ class SlackPlugin extends Plugin {
         // Force lookup rather than use cached data..
         // This ensures we get the full ticket, with all
         // thread entries etc.. 
-        return Ticket::lookup(array(
+        return Ticket::lookup([
                     'ticket_id' => $ticket_id
-        ));
+        ]);
     }
 
     /**
@@ -267,7 +308,7 @@ class SlackPlugin extends Plugin {
      * @return String containing either just a URL or a complete image tag
      * @source https://gravatar.com/site/implement/images/php/
      */
-    function get_gravatar($email, $s = 80, $d = 'mm', $r = 'g', $img = false, $atts = array()) {
+    function get_gravatar($email, $s = 80, $d = 'mm', $r = 'g', $img = false, $atts = []) {
         $url = 'https://www.gravatar.com/avatar/';
         $url .= md5(strtolower(trim($email)));
         $url .= "?s=$s&d=$d&r=$r";

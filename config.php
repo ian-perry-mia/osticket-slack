@@ -43,7 +43,7 @@ class SlackPluginConfig extends PluginConfig
                 'hint' => 'Readme first: https://github.com/ian-perry-mia/osticket-slack'
             ]),
 
-            new TextboxField([
+            'slack-webhook-url' => new TextboxField([
                 'id' => 'slack-webhook-url',
                 'label' => 'Webhook URL',
                 'required' => true,
@@ -53,7 +53,7 @@ class SlackPluginConfig extends PluginConfig
                 ],
             ]),
 
-            new TextboxField([
+            'slack-regex-subject-ignore' => new TextboxField([
                 'id' => 'slack-regex-subject-ignore',
                 'label' => 'Ignore when subject equals regex',
                 'hint' => 'Auto delimited, always case-insensitive',
@@ -67,11 +67,11 @@ class SlackPluginConfig extends PluginConfig
                 'label' => $__('Conditions to notify on')
             ]),
 
-            new BooleanField([
+            'slack-update-ticket-opened' =>new BooleanField([
                 'id' => 'slack-update-ticket-opened',
                 'label' => 'Ticket Opened'
             ]),
-            new TextboxField([
+            'slack-update-ticket-opened-color' =>new TextboxField([
                 'id' => 'slack-update-ticket-opened-color',
                 'label' => 'HEX code for Ticket Opened color',
                 'default' => '#36a64f',
@@ -82,31 +82,62 @@ class SlackPluginConfig extends PluginConfig
                 ],
             ]),
 
-            new TextboxField([
-                'id' => 'slack-update-ticket-stale-color',
-                'label' => 'HEX code for Stale Ticket color',
-                'default' => '#b21111',
-                'hint' => 'Optional: Specify a HEX color code for the Slack message when a ticket is opened, e.g. #b21111',
-                'configuration' => [
-                    'size' => 30,
-                    'length' => 7
-                ],
+            'slack-update-ticket-internal-note' => new BooleanField([
+                'id' => 'slack-update-ticket-internal-note',
+                'label' => 'Ticket Internal Note'
             ]),
-
-            new BooleanField([
-                'id' => 'slack-update-ticket-reply',
-                'label' => 'Ticket Reply'
-            ]),
-            new TextboxField([
-                'id' => 'slack-update-ticket-reply-color',
-                'label' => 'HEX code for Ticket Reply color',
-                'default' => '#aa00ffff',
+            'slack-update-ticket-internal-note-color' => new TextboxField([
+                'id' => 'slack-update-ticket-internal-note-color',
+                'label' => 'HEX code for Ticket Internal Note color',
+                'default' => '#aa00ff',
                 'hint' => 'Optional: Specify a HEX color code for the Slack message when a ticket is replied to, e.g. #aa00ff',
                 'configuration' => [
                     'size' => 30,
                     'length' => 7
                 ],
             ]),
+
+            'slack-update-ticket-agent-reply' => new BooleanField([
+                'id' => 'slack-update-ticket-agent-reply',
+                'label' => 'Ticket Agent Reply'
+            ]),
+            'slack-update-ticket-agent-reply-color' => new TextboxField([
+                'id' => 'slack-update-ticket-agent-reply-color',
+                'label' => 'HEX code for Ticket Agent Reply color',
+                'default' => '#aa00ff',
+                'hint' => 'Optional: Specify a HEX color code for the Slack message when a ticket is replied to, e.g. #aa00ff',
+                'configuration' => [
+                    'size' => 30,
+                    'length' => 7
+                ],
+            ]),
+
+            'slack-update-ticket-user-reply' => new BooleanField([
+                'id' => 'slack-update-ticket-user-reply',
+                'label' => 'Ticket User Reply'
+            ]),
+            'slack-update-ticket-user-reply-color' => new TextboxField([
+                'id' => 'slack-update-ticket-user-reply-color',
+                'label' => 'HEX code for Ticket User Reply color',
+                'default' => '#aa00ff',
+                'hint' => 'Optional: Specify a HEX color code for the Slack message when a ticket is replied to, e.g. #aa00ff',
+                'configuration' => [
+                    'size' => 30,
+                    'length' => 7
+                ],
+            ]),
+
+            'slack-update-ticket-stale-color' => new TextboxField([
+                'id' => 'slack-update-ticket-stale-color',
+                'label' => 'HEX code for Overdue Ticket color',
+                'default' => '#b21111',
+                'hint' => 'Optional: Specify a HEX color code to override ticket color when overdue, e.g. #b21111',
+                'configuration' => [
+                    'size' => 30,
+                    'length' => 7
+                ],
+            ]),
+
             'message-template' => new TextareaField([
                 'label' => $__('Message Template'),
                 'hint' => $__('The main text part of the Slack message, uses Ticket Variables, for what the user typed, use variable: %{slack_safe_message}'),
