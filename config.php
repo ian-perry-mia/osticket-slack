@@ -36,13 +36,14 @@ class SlackPluginConfig extends PluginConfig {
                 'label' => $__('Slack notifier'),
                 'hint'  => $__('Readme first: https://github.com/clonemeagain/osticket-slack')
                     )),
-            'slack-webhook-url'          => new TextboxField(array(
+            'slack-webhook-url'          => new TextboxField([
                 'label'         => $__('Webhook URL'),
-                'configuration' => array(
+		'required'	=> true,
+		'configuration' => [
                     'size'   => 100,
                     'length' => 200
-                ),
-                    )),
+		],
+	    ]),
             'slack-regex-subject-ignore' => new TextboxField([
                 'label'         => $__('Ignore when subject equals regex'),
                 'hint'          => $__('Auto delimited, always case-insensitive'),

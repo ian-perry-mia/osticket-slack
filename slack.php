@@ -14,8 +14,8 @@ class SlackPlugin extends Plugin {
 
     static $pluginInstance = null;
 
-    private function getPluginInstance(?int $id) {
-        if($id && ($i = $this->getInstance($id)))
+    private function getPluginInstance(int $id = -1) {
+        if($id != -1 && ($i = $this->getInstance($id)))
             return $i;
 
         return $this->getInstances()->first();
@@ -52,7 +52,7 @@ class SlackPlugin extends Plugin {
             error_log("Slack plugin called too early.");
             return;
         }
-        
+   
         // if slack-update-types is "updatesOnly", then don't send this!
         if($this->getConfig(self::$pluginInstance)->get('slack-update-types') == 'updatesOnly') {return;}
 
@@ -128,13 +128,13 @@ class SlackPlugin extends Plugin {
      * @throws \Exception
      */
     function sendToSlack(Ticket $ticket, $heading, $body, $colour = 'good') {
-        global $ost, $cfg;
+	global $ost, $cfg;
         if (!$ost instanceof osTicket || !$cfg instanceof OsticketConfig) {
             error_log("Slack plugin called too early.");
             return;
-        }
-        $url = $this->getConfig(self::$pluginInstance)->get('slack-webhook-url');
-        if (!$url) {
+	}
+        $url = $this->getConfig($this->getPluginInstance())->get('slack-webhook-url');
+	if (!$url) {
             $ost->logError('Slack Plugin not configured', 'You need to read the Readme and configure a webhook URL before using this.');
         }
 
@@ -187,7 +187,7 @@ class SlackPlugin extends Plugin {
 
         // Format the payload:
         $data_string = utf8_encode(json_encode($payload));
-
+		
         try {
             // Setup curl
             $ch = curl_init($url);
